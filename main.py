@@ -12,9 +12,12 @@ def get_google_results(query):
 
     titles=[]
     body=[]
+    links=[]
     for r in ddgs_text_gen:
         titles.append(r['title'])
         body.append(r['body'])
+        links.append(r['href'])
+    raw_text = titles + body
 
     def remove_stop_words(text):
         stop_words = stopwords.words('english')
@@ -40,7 +43,7 @@ def get_google_results(query):
 
     important_keywords = list(set(important_keywords))
 
-    return important_keywords
+    return important_keywords,links,raw_text
 
 def cosine_similarity(query,keywords):
     from sentence_transformers import SentenceTransformer
@@ -65,81 +68,58 @@ def get_top_keywords(query,keywords):
     top_keywords = sorted(dic, key=dic.get, reverse=True)[:50]
     return top_keywords
 
-import wikipediaapi
+#===================================================================================================
+import re
+from nltk.corpus import stopwords
 
-def get_wikipedia_content(query):
-    wiki_wiki = wikipediaapi.Wikipedia('en')
-    page = wiki_wiki.page(query)
-    return page.text
-def get_ngram(query):
-    query_tokens = word_tokenize(query.lower())
-    query_tokens = [token for token in query_tokens if token.isalpha()]
-    query_tokens = [token for token in query_tokens if token not in stopwords.words('english')]
-    query_tokens = [token for token in query_tokens if len(token)>2]
-    content=""
-    for i in query_tokens:
-        content+=get_wikipedia_content(i)
-    if content=="":
-        return []
+def find_related_words(content, keyword):
+    dict={}
+    for i in keyword:
+        pattern = r'\b(\w{3,})\s+' + re.escape(i) + r'\s+(\w{3,})\b'
+        matches = re.findall(pattern, content, re.IGNORECASE)
     
-    n_words_list=[]
-    for i in range(2,4):
-        n_words_list.extend(find_ngram_words(content,i))
-    # n_words_list = [token for token in n_words_list if token.isalpha()]
+    # Extract words from the tuples and return as a list
+        words = [word for match in matches for word in match]
+        dict[i]=words
     
-    def clean_text(text):
-        import re
-        text = text.lower()
-        text = re.sub(r"[^a-zA-Z0-9]", " ", text)
-        stopwords_ = stopwords.words('english')
-        text = ' '.join([word for word in text.split() if word not in stopwords_])
-        return text
+    return dict
 
 
-    n_words_list=[i for i in n_words_list if i not in query_tokens]
-    n_words_list=[clean_text(i) for i in n_words_list]
-    n_words_list=list(set(n_words_list))
-    n_words_list=n_words_list[:100]
-
-    n_keywords=get_top_keywords(query,n_words_list)
-    n_keywords=[i for i in n_keywords if i not in query_tokens]
-    def validate_keyword(keyword):
-        if len(keyword.split())>1:
-            for i in keyword.split():
-                if i in query_tokens:
-                    return False 
-            return True
-    n_keywords=[i for i in n_keywords if validate_keyword(i)]
-    return n_keywords[:20]
-    
 
 
-    
-def find_ngram_words(content, n):
-    
-    # Tokenize the content
-    tokens = word_tokenize(content)
-    
-    # Generate n-grams
-    ngram_list = list(ngrams(tokens, n))
-    ngram_words = [' '.join(gram) for gram in ngram_list]
-    return ngram_words
-    
+#===================================================================================================
     
 # Example usage
 
 # Extract relevant n-gram keywords from Wikipedia content
 query = "what is the capital of egypt"
-keywords = get_google_results(query)
+keywords,links ,raw_text= get_google_results(query)
 unique_keywords = list(set(get_top_keywords(query,keywords)))
 query_tokens = word_tokenize(query.lower())
 unique_keywords = [keyword for keyword in unique_keywords if keyword not in query_tokens]
-unique_keywords=get_ngram(query)+unique_keywords
 
+
+random.shuffle(unique_keywords)
+# print(unique_keywords)
+raw_text = " ".join(raw_text)
+related_words = find_related_words(raw_text, unique_keywords)
+words=[]
+for i,j in related_words.items():
+    if len(j)>0:
+        words.append(str(i)+" "+str(j[0]))
+words=list(set(words))
+def clear_words(words):
+    stop_words = stopwords.words('english')
+    for i in words.split():
+        if i in stop_words:
+            return False
+        if len(i)<3:
+            return False
+    return True
+words=[i for i in words if clear_words(i)]
+unique_keywords=unique_keywords+words
 random.shuffle(unique_keywords)
 print(unique_keywords)
 
 
-
-# Find 2-gram words in the content
 
